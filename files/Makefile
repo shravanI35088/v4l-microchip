@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 ccflags-y += -I$(SRC)/ -DWILC_ASIC_A0 -DWILC_DEBUGFS
 
-obj-m += v4l-microchip.o
+obj-m += v4l2-microchip.o
 
 SRC := $(shell pwd)
 

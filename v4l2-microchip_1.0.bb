@@ -13,9 +13,9 @@ PR = "r0"
 inherit module
 
 SRC_URI = 	"file://Makefile \
-		file://v4l-microchip.c \
+		file://v4l2-microchip.c \
 		file://COPYING \
 		"
 
-S = "${WORKDIR}/"
+S = "${WORKDIR}"
 

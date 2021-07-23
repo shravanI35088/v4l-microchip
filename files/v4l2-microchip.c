@@ -38,6 +38,7 @@
 #include <media/v4l2-event.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-dma-contig.h>
+#include <linux/platform_device.h>
 
 MODULE_DESCRIPTION("V4L2 Skeleton Driver");
 MODULE_AUTHOR("Microchip");
@@ -61,7 +62,7 @@ MODULE_LICENSE("GPL v2");
  * @sequence: frame sequence counter
  */
 struct skeleton {
-	struct platform_device *pdev
+	struct platform_device *pdev;
 	struct v4l2_device v4l2_dev;
 	struct video_device vdev;
 	struct v4l2_ctrl_handler ctrl_handler;
@@ -748,11 +749,10 @@ static const struct v4l2_file_operations skel_fops = {
  * the driver should be complete. So the initial format, standard, timings
  * and video input should all be initialized to some reasonable value.
  */
-static int v4l2-microchip_probe(struct platform_device *pdev)
+static int v4l2_microchip_probe(struct platform_device *pdev)
 {
 	/* The initial timings are chosen to be 720p60. */
-	static const struct v4l2_dv_timings timings_def =
-		V4L2_DV_BT_CEA_1280X720P60;
+	static const struct v4l2_dv_timings timings_def = V4L2_DV_BT_CEA_1280X720P60;
 	struct skeleton *skel;
 	struct video_device *vdev;
 	struct v4l2_ctrl_handler *hdl;
@@ -814,7 +814,9 @@ static int v4l2-microchip_probe(struct platform_device *pdev)
 	q->drv_priv = skel;
 	q->buf_struct_size = sizeof(struct skel_buffer);
 	q->ops = &skel_qops;
+#if 0
 	q->mem_ops = &vb2_dma_contig_memops;
+#endif
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	/*
 	 * Assume that this DMA engine needs to have at least two buffers
@@ -882,7 +884,7 @@ disable_v4l2:
 	return ret;
 }
 
-static void v4l2-microchip_remove(struct platform_device *pdev)
+static int v4l2_microchip_remove(struct platform_device *pdev)
 {
 	struct v4l2_device *v4l2_dev = platform_get_drvdata(pdev);
 	struct skeleton *skel = container_of(v4l2_dev, struct skeleton, v4l2_dev);
@@ -890,23 +892,24 @@ static void v4l2-microchip_remove(struct platform_device *pdev)
 	video_unregister_device(&skel->vdev);
 	v4l2_ctrl_handler_free(&skel->ctrl_handler);
 	v4l2_device_unregister(&skel->v4l2_dev);
+	return 0;
 }
 
 /* Match table for of_platform binding */
-static const struct of_device_id v4l2-microchip_of_match[] = {
-	{ .compatible = "microchip,v4l2-microchip" },
+static const struct of_device_id v4l2_microchip_of_match[] = {
+	{ .compatible = "microchip,v4l2_microchip" },
 	{},
 }
 ;
-MODULE_DEVICE_TABLE(of, v4l2-microchip_of_match);
+MODULE_DEVICE_TABLE(of, v4l2_microchip_of_match);
 
-static struct platform_driver v4l2-microchip-driver = {
-	.probe = v4l2-microchip_probe,
-	.remove = v4l2-microchip_remove,
+static struct platform_driver v4l2_microchip_driver = {
+	.probe = v4l2_microchip_probe,
+	.remove = v4l2_microchip_remove,
 	.driver = {
-		.name = "v4l2-microchip",
-		.of_match_table = v4l2-microchip_of_match,
+		.name = "v4l2_microchip",
+		.of_match_table = v4l2_microchip_of_match,
 	},
 };
 
-module_platform_driver(v4l2-microchip-driver);
+module_platform_driver(v4l2_microchip_driver);
