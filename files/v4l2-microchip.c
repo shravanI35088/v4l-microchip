@@ -1,8 +1,8 @@
 /*
- * This is a V4L2 PCI Skeleton Driver. It gives an initial skeleton source
- * for use with other PCI drivers.
+ * This is a V4L2 Skeleton Driver. It gives an initial skeleton source
+ * for use with other drivers.
  *
- * This skeleton PCI driver assumes that the card has an S-Video connector as
+ * This skeleton driver assumes that the card has an S-Video connector as
  * input 0 and an HDMI connector as input 1.
  *
  * Copyright 2014 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
@@ -27,7 +27,6 @@
 #include <linux/init.h>
 #include <linux/kmod.h>
 #include <linux/mutex.h>
-#include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/videodev2.h>
 #include <linux/v4l2-dv-timings.h>
@@ -40,13 +39,13 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-dma-contig.h>
 
-MODULE_DESCRIPTION("V4L2 PCI Skeleton Driver");
-MODULE_AUTHOR("Hans Verkuil");
+MODULE_DESCRIPTION("V4L2 Skeleton Driver");
+MODULE_AUTHOR("Microchip");
 MODULE_LICENSE("GPL v2");
 
 /**
  * struct skeleton - All internal data for one instance of device
- * @pdev: PCI device
+ * @pdev: platform_device *pdev
  * @v4l2_dev: top-level v4l2 device struct
  * @vdev: video node structure
  * @ctrl_handler: control handler structure
@@ -62,7 +61,7 @@ MODULE_LICENSE("GPL v2");
  * @sequence: frame sequence counter
  */
 struct skeleton {
-	struct pci_dev *pdev;
+	struct platform_device *pdev
 	struct v4l2_device v4l2_dev;
 	struct video_device vdev;
 	struct v4l2_ctrl_handler ctrl_handler;
@@ -90,12 +89,6 @@ static inline struct skel_buffer *to_skel_buffer(struct vb2_v4l2_buffer *vbuf)
 	return container_of(vbuf, struct skel_buffer, vb);
 }
 
-static const struct pci_device_id skeleton_pci_tbl[] = {
-	/* { PCI_DEVICE(PCI_VENDOR_ID_, PCI_DEVICE_ID_) }, */
-	{ 0, }
-};
-MODULE_DEVICE_TABLE(pci, skeleton_pci_tbl);
-
 /*
  * HDTV: this structure has the capabilities of the HDTV receiver.
  * It is used to constrain the huge list of possible formats based
@@ -121,6 +114,7 @@ static const struct v4l2_dv_timings_cap skel_timings_cap = {
  */
 #define SKEL_TVNORMS V4L2_STD_ALL
 
+#if 0
 /*
  * Interrupt handler: typically interrupts happen after a new frame has been
  * captured. It is the job of the handler to remove the new frame from the
@@ -154,6 +148,7 @@ static irqreturn_t skeleton_irq(int irq, void *dev_id)
 #endif
 	return IRQ_HANDLED;
 }
+#endif
 
 /*
  * Setup the constraints of the queue: besides setting the number of planes
@@ -301,12 +296,14 @@ static const struct vb2_ops skel_qops = {
 static int skeleton_querycap(struct file *file, void *priv,
 			     struct v4l2_capability *cap)
 {
+#if 0
 	struct skeleton *skel = video_drvdata(file);
 
 	strlcpy(cap->driver, KBUILD_MODNAME, sizeof(cap->driver));
-	strlcpy(cap->card, "V4L2 PCI Skeleton", sizeof(cap->card));
+	strlcpy(cap->card, "V4L2 Microchip Skeleton", sizeof(cap->card));
 	snprintf(cap->bus_info, sizeof(cap->bus_info), "PCI:%s",
 		 pci_name(skel->pdev));
+#endif
 	return 0;
 }
 
@@ -751,7 +748,7 @@ static const struct v4l2_file_operations skel_fops = {
  * the driver should be complete. So the initial format, standard, timings
  * and video input should all be initialized to some reasonable value.
  */
-static int skeleton_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int v4l2-microchip_probe(struct platform_device *pdev)
 {
 	/* The initial timings are chosen to be 720p60. */
 	static const struct v4l2_dv_timings timings_def =
@@ -762,30 +759,22 @@ static int skeleton_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct vb2_queue *q;
 	int ret;
 
-	/* Enable PCI */
-	ret = pci_enable_device(pdev);
-	if (ret)
-		return ret;
-	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
-	if (ret) {
-		dev_err(&pdev->dev, "no suitable DMA available.\n");
-		goto disable_pci;
-	}
-
 	/* Allocate a new instance */
 	skel = devm_kzalloc(&pdev->dev, sizeof(struct skeleton), GFP_KERNEL);
 	if (!skel) {
 		ret = -ENOMEM;
-		goto disable_pci;
+		goto disable_v4l2;
 	}
 
+#if 0
 	/* Allocate the interrupt */
 	ret = devm_request_irq(&pdev->dev, pdev->irq,
 			       skeleton_irq, 0, KBUILD_MODNAME, skel);
 	if (ret) {
 		dev_err(&pdev->dev, "request_irq failed\n");
-		goto disable_pci;
+		goto disable_v4l2;
 	}
+#endif
 	skel->pdev = pdev;
 
 	/* Fill in the initial format-related settings */
@@ -796,7 +785,7 @@ static int skeleton_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Initialize the top-level structure */
 	ret = v4l2_device_register(&pdev->dev, &skel->v4l2_dev);
 	if (ret)
-		goto disable_pci;
+		goto disable_v4l2;
 
 	mutex_init(&skel->lock);
 
@@ -883,33 +872,41 @@ static int skeleton_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto free_hdl;
 
-	dev_info(&pdev->dev, "V4L2 PCI Skeleton Driver loaded\n");
+	dev_info(&pdev->dev, "V4L2 Microchip Skeleton Driver loaded\n");
 	return 0;
 
 free_hdl:
 	v4l2_ctrl_handler_free(&skel->ctrl_handler);
 	v4l2_device_unregister(&skel->v4l2_dev);
-disable_pci:
-	pci_disable_device(pdev);
+disable_v4l2:
 	return ret;
 }
 
-static void skeleton_remove(struct pci_dev *pdev)
+static void v4l2-microchip_remove(struct platform_device *pdev)
 {
-	struct v4l2_device *v4l2_dev = pci_get_drvdata(pdev);
+	struct v4l2_device *v4l2_dev = platform_get_drvdata(pdev);
 	struct skeleton *skel = container_of(v4l2_dev, struct skeleton, v4l2_dev);
 
 	video_unregister_device(&skel->vdev);
 	v4l2_ctrl_handler_free(&skel->ctrl_handler);
 	v4l2_device_unregister(&skel->v4l2_dev);
-	pci_disable_device(skel->pdev);
 }
 
-static struct pci_driver skeleton_driver = {
-	.name = KBUILD_MODNAME,
-	.probe = skeleton_probe,
-	.remove = skeleton_remove,
-	.id_table = skeleton_pci_tbl,
+/* Match table for of_platform binding */
+static const struct of_device_id v4l2-microchip_of_match[] = {
+	{ .compatible = "microchip,v4l2-microchip" },
+	{},
+}
+;
+MODULE_DEVICE_TABLE(of, v4l2-microchip_of_match);
+
+static struct platform_driver v4l2-microchip-driver = {
+	.probe = v4l2-microchip_probe,
+	.remove = v4l2-microchip_remove,
+	.driver = {
+		.name = "v4l2-microchip",
+		.of_match_table = v4l2-microchip_of_match,
+	},
 };
 
-module_pci_driver(skeleton_driver);
+module_platform_driver(v4l2-microchip-driver);
