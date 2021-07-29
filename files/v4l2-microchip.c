@@ -839,10 +839,11 @@ static int v4l2_microchip_probe(struct platform_device *pdev)
 	 * the vb2 core will allocate the buffers in 32-bit DMA memory.
 	 */
 	q->gfp_flags = GFP_DMA32;
+#if 0
 	ret = vb2_queue_init(q);
 	if (ret)
 		goto free_hdl;
-
+#endif
 	INIT_LIST_HEAD(&skel->buf_list);
 	spin_lock_init(&skel->qlock);
 
