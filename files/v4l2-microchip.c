@@ -319,6 +319,14 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct skeleton *skel = vb2_get_drv_priv(vq);
 	int ret = 0;
 
+	/* Enable stream on the sub device */
+	ret = v4l2_subdev_call(skel->current_subdev->sd, video, s_stream, 1);
+	if (ret && ret != -ENOIOCTLCMD) {
+		v4l2_err(&skel->v4l2_dev, "stream on failed in subdev %d\n",
+			 ret);
+		goto err_start_stream;
+	}
+
 	skel->sequence = 0;
 
 	/* TODO: start DMA */
@@ -330,6 +338,8 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 		 */
 		return_all_buffers(skel, VB2_BUF_STATE_QUEUED);
 	}
+
+err_start_stream:
 	return ret;
 }
 
@@ -340,11 +350,17 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 static void stop_streaming(struct vb2_queue *vq)
 {
 	struct skeleton *skel = vb2_get_drv_priv(vq);
+	int ret = 0;
 
 	/* TODO: stop DMA */
 
 	/* Release all active buffers */
 	return_all_buffers(skel, VB2_BUF_STATE_ERROR);
+
+	/* Disable stream on the sub device */
+	ret = v4l2_subdev_call(skel->current_subdev->sd, video, s_stream, 0);
+	if (ret && ret != -ENOIOCTLCMD)
+		v4l2_err(&skel->v4l2_dev, "stream off failed in subdev\n");
 }
 
 /*
