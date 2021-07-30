@@ -39,6 +39,8 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-dma-contig.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
+#include <linux/of_graph.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
@@ -137,17 +139,16 @@ static int v4l2_parse_dt(struct device *dev, struct skeleton *skel)
 		flags = v4l2_epn.bus.parallel.flags;
 
 		if (flags & V4L2_MBUS_HSYNC_ACTIVE_LOW)
-			subdev_entity->pfe_cfg0 = ISC_PFE_CFG0_HPOL_LOW;
+			subdev_entity->pfe_cfg0 = 0;
 
 		if (flags & V4L2_MBUS_VSYNC_ACTIVE_LOW)
-			subdev_entity->pfe_cfg0 |= ISC_PFE_CFG0_VPOL_LOW;
+			subdev_entity->pfe_cfg0 = 0;
 
 		if (flags & V4L2_MBUS_PCLK_SAMPLE_FALLING)
-			subdev_entity->pfe_cfg0 |= ISC_PFE_CFG0_PPOL_LOW;
+			subdev_entity->pfe_cfg0  = 0;
 
 		if (v4l2_epn.bus_type == V4L2_MBUS_BT656)
-			subdev_entity->pfe_cfg0 |= ISC_PFE_CFG0_CCIR_CRC |
-					ISC_PFE_CFG0_CCIR656;
+			subdev_entity->pfe_cfg0 = 0;
 
 		list_add_tail(&subdev_entity->list, &skel->subdev_entities);
 	}
@@ -820,7 +821,7 @@ static int v4l2_async_bound(struct v4l2_async_notifier *notifier,
 			    struct v4l2_async_subdev *asd)
 {
 	struct skeleton *skel = container_of(notifier->v4l2_dev,
-					     struct skeleton *skel, v4l2_dev);
+					     struct skeleton, v4l2_dev);
 	struct v4l2_subdev_entity *subdev_entity =
 		container_of(notifier, struct v4l2_subdev_entity, notifier);
 
@@ -839,7 +840,7 @@ static void v4l2_async_unbind(struct v4l2_async_notifier *notifier,
 			      struct v4l2_async_subdev *asd)
 {
 	struct skeleton *skel = container_of(notifier->v4l2_dev,
-					     struct skeleton *skel, v4l2_dev);
+					     struct skeleton, v4l2_dev);
 //	cancel_work_sync(&skel->awb_work);
 	video_unregister_device(&skel->vdev);
 	v4l2_ctrl_handler_free(&skel->ctrl_handler);
@@ -849,7 +850,7 @@ static int v4l2_async_complete(struct v4l2_async_notifier *notifier)
 {
 	int ret = 0;
 	struct skeleton *skel = container_of(notifier->v4l2_dev,
-					     struct skeleton *skel, v4l2_dev);
+					     struct skeleton, v4l2_dev);
 
 	ret = v4l2_device_register_subdev_nodes(&skel->v4l2_dev);
 	if (ret < 0) {
@@ -927,12 +928,12 @@ static int v4l2_microchip_probe(struct platform_device *pdev)
 
 	ret = v4l2_parse_dt(&pdev->dev, skel);
 	if (ret) {
-		dev_err(dev, "fail to parse device tree\n");
+		dev_err(&pdev->dev, "fail to parse device tree\n");
 		goto free_hdl;
 	}
 
 	if (list_empty(&skel->subdev_entities)) {
-		dev_err(dev, "no subdev found\n");
+		dev_err(&pdev->dev, "no subdev found\n");
 		ret = -ENODEV;
 		goto free_hdl;
 	}
@@ -960,11 +961,11 @@ static int v4l2_microchip_probe(struct platform_device *pdev)
 		ret = v4l2_async_notifier_register(&skel->v4l2_dev,
 						   &subdev_entity->notifier);
 		if (ret) {
-			dev_err(dev, "fail to register async notifier\n");
+			dev_err(&pdev->dev, "fail to register async notifier\n");
 			goto cleanup_subdev;
 		}
 
-		if (video_is_registered(&skel->video_dev))
+		if (video_is_registered(&skel->vdev))
 			break;
 	}
 
