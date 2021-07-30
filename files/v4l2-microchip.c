@@ -832,6 +832,8 @@ static int v4l2_async_bound(struct v4l2_async_notifier *notifier,
 
 	subdev_entity->sd = subdev;
 
+	printk("v4l2_async_bound \n");
+
 	return 0;
 }
 
@@ -848,6 +850,9 @@ static void v4l2_async_unbind(struct v4l2_async_notifier *notifier,
 
 static int v4l2_async_complete(struct v4l2_async_notifier *notifier)
 {
+	struct vb2_queue *q;
+	struct v4l2_ctrl_handler *hdl;
+	struct video_device *vdev;
 	int ret = 0;
 	struct skeleton *skel = container_of(notifier->v4l2_dev,
 					     struct skeleton, v4l2_dev);
@@ -861,7 +866,95 @@ static int v4l2_async_complete(struct v4l2_async_notifier *notifier)
 	skel->current_subdev = container_of(notifier,
 					   struct v4l2_subdev_entity, notifier);
 
-	return 0;
+	mutex_init(&skel->lock);
+
+	/* Add the controls */
+	hdl = &skel->ctrl_handler;
+	v4l2_ctrl_handler_init(hdl, 4);
+	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
+			  V4L2_CID_BRIGHTNESS, 0, 255, 1, 127);
+	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
+			  V4L2_CID_CONTRAST, 0, 255, 1, 16);
+	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
+			  V4L2_CID_SATURATION, 0, 255, 1, 127);
+	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
+			  V4L2_CID_HUE, -128, 127, 1, 0);
+	if (hdl->error) {
+		ret = hdl->error;
+		goto free_hdl;
+	}
+	skel->v4l2_dev.ctrl_handler = hdl;
+
+	/* Initialize the vb2 queue */
+	q = &skel->queue;
+	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	q->io_modes = VB2_MMAP | VB2_DMABUF | VB2_READ;
+	q->dev = &skel->pdev->dev;
+	q->drv_priv = skel;
+	q->buf_struct_size = sizeof(struct skel_buffer);
+	q->ops = &skel_qops;
+#if 0
+	q->mem_ops = &vb2_dma_contig_memops;
+#endif
+	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	/*
+	 * Assume that this DMA engine needs to have at least two buffers
+	 * available before it can be started. The start_streaming() op
+	 * won't be called until at least this many buffers are queued up.
+	 */
+	q->min_buffers_needed = 2;
+	/*
+	 * The serialization lock for the streaming ioctls. This is the same
+	 * as the main serialization lock, but if some of the non-streaming
+	 * ioctls could take a long time to execute, then you might want to
+	 * have a different lock here to prevent VIDIOC_DQBUF from being
+	 * blocked while waiting for another action to finish. This is
+	 * generally not needed for PCI devices, but USB devices usually do
+	 * want a separate lock here.
+	 */
+	q->lock = &skel->lock;
+	/*
+	 * Since this driver can only do 32-bit DMA we must make sure that
+	 * the vb2 core will allocate the buffers in 32-bit DMA memory.
+	 */
+	q->gfp_flags = GFP_DMA32;
+#if 0
+	ret = vb2_queue_init(q);
+	if (ret)
+		goto free_hdl;
+#endif
+	INIT_LIST_HEAD(&skel->buf_list);
+	spin_lock_init(&skel->qlock);
+
+	/* Initialize the video_device structure */
+	vdev = &skel->vdev;
+	strlcpy(vdev->name, KBUILD_MODNAME, sizeof(vdev->name));
+	/*
+	 * There is nothing to clean up, so release is set to an empty release
+	 * function. The release callback must be non-NULL.
+	 */
+	vdev->release = video_device_release_empty;
+	vdev->fops = &skel_fops,
+	vdev->ioctl_ops = &skel_ioctl_ops,
+	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_READWRITE |
+			    V4L2_CAP_STREAMING;
+	/*
+	 * The main serialization lock. All ioctls are serialized by this
+	 * lock. Exception: if q->lock is set, then the streaming ioctls
+	 * are serialized by that separate lock.
+	 */
+	vdev->lock = &skel->lock;
+	vdev->queue = q;
+	vdev->v4l2_dev = &skel->v4l2_dev;
+	/* Supported SDTV standards, if any */
+	vdev->tvnorms = SKEL_TVNORMS;
+	video_set_drvdata(vdev, skel);
+
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+	printk("v4l2_async_complete \n");
+
+free_hdl:
+	return ret;
 }
 
 const struct v4l2_async_notifier_operations v4l2_async_ops = {
@@ -892,10 +985,7 @@ static int v4l2_microchip_probe(struct platform_device *pdev)
 	/* The initial timings are chosen to be 720p60. */
 	static const struct v4l2_dv_timings timings_def = V4L2_DV_BT_CEA_1280X720P60;
 	struct skeleton *skel;
-	struct video_device *vdev;
 	struct v4l2_subdev_entity *subdev_entity;
-	struct v4l2_ctrl_handler *hdl;
-	struct vb2_queue *q;
 	int ret;
 
 	/* Allocate a new instance */
@@ -968,94 +1058,6 @@ static int v4l2_microchip_probe(struct platform_device *pdev)
 		if (video_is_registered(&skel->vdev))
 			break;
 	}
-
-	mutex_init(&skel->lock);
-
-	/* Add the controls */
-	hdl = &skel->ctrl_handler;
-	v4l2_ctrl_handler_init(hdl, 4);
-	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
-			  V4L2_CID_BRIGHTNESS, 0, 255, 1, 127);
-	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
-			  V4L2_CID_CONTRAST, 0, 255, 1, 16);
-	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
-			  V4L2_CID_SATURATION, 0, 255, 1, 127);
-	v4l2_ctrl_new_std(hdl, &skel_ctrl_ops,
-			  V4L2_CID_HUE, -128, 127, 1, 0);
-	if (hdl->error) {
-		ret = hdl->error;
-		goto free_hdl;
-	}
-	skel->v4l2_dev.ctrl_handler = hdl;
-
-	/* Initialize the vb2 queue */
-	q = &skel->queue;
-	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	q->io_modes = VB2_MMAP | VB2_DMABUF | VB2_READ;
-	q->dev = &pdev->dev;
-	q->drv_priv = skel;
-	q->buf_struct_size = sizeof(struct skel_buffer);
-	q->ops = &skel_qops;
-#if 0
-	q->mem_ops = &vb2_dma_contig_memops;
-#endif
-	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	/*
-	 * Assume that this DMA engine needs to have at least two buffers
-	 * available before it can be started. The start_streaming() op
-	 * won't be called until at least this many buffers are queued up.
-	 */
-	q->min_buffers_needed = 2;
-	/*
-	 * The serialization lock for the streaming ioctls. This is the same
-	 * as the main serialization lock, but if some of the non-streaming
-	 * ioctls could take a long time to execute, then you might want to
-	 * have a different lock here to prevent VIDIOC_DQBUF from being
-	 * blocked while waiting for another action to finish. This is
-	 * generally not needed for PCI devices, but USB devices usually do
-	 * want a separate lock here.
-	 */
-	q->lock = &skel->lock;
-	/*
-	 * Since this driver can only do 32-bit DMA we must make sure that
-	 * the vb2 core will allocate the buffers in 32-bit DMA memory.
-	 */
-	q->gfp_flags = GFP_DMA32;
-#if 0
-	ret = vb2_queue_init(q);
-	if (ret)
-		goto free_hdl;
-#endif
-	INIT_LIST_HEAD(&skel->buf_list);
-	spin_lock_init(&skel->qlock);
-
-	/* Initialize the video_device structure */
-	vdev = &skel->vdev;
-	strlcpy(vdev->name, KBUILD_MODNAME, sizeof(vdev->name));
-	/*
-	 * There is nothing to clean up, so release is set to an empty release
-	 * function. The release callback must be non-NULL.
-	 */
-	vdev->release = video_device_release_empty;
-	vdev->fops = &skel_fops,
-	vdev->ioctl_ops = &skel_ioctl_ops,
-	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_READWRITE |
-			    V4L2_CAP_STREAMING;
-	/*
-	 * The main serialization lock. All ioctls are serialized by this
-	 * lock. Exception: if q->lock is set, then the streaming ioctls
-	 * are serialized by that separate lock.
-	 */
-	vdev->lock = &skel->lock;
-	vdev->queue = q;
-	vdev->v4l2_dev = &skel->v4l2_dev;
-	/* Supported SDTV standards, if any */
-	vdev->tvnorms = SKEL_TVNORMS;
-	video_set_drvdata(vdev, skel);
-
-	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
-	if (ret)
-		goto free_hdl;
 
 	dev_info(&pdev->dev, "V4L2 Microchip Skeleton Driver loaded\n");
 	return 0;
