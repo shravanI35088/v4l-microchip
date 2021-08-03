@@ -909,7 +909,7 @@ static int v4l2_async_complete(struct v4l2_async_notifier *notifier)
 	q->drv_priv = skel;
 	q->buf_struct_size = sizeof(struct skel_buffer);
 	q->ops = &skel_qops;
-#if 0
+#if 1
 	q->mem_ops = &vb2_dma_contig_memops;
 #endif
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
@@ -934,7 +934,7 @@ static int v4l2_async_complete(struct v4l2_async_notifier *notifier)
 	 * the vb2 core will allocate the buffers in 32-bit DMA memory.
 	 */
 	q->gfp_flags = GFP_DMA32;
-#if 0
+#if 1
 	ret = vb2_queue_init(q);
 	if (ret)
 		goto free_hdl;
