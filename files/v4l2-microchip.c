@@ -405,6 +405,7 @@ static int skeleton_querycap(struct file *file, void *priv,
 static void skeleton_fill_pix_format(struct skeleton *skel,
 				     struct v4l2_pix_format *pix)
 {
+#if 0
 	pix->pixelformat = V4L2_PIX_FMT_YUYV;
 	if (skel->input == 0) {
 		/* S-Video input */
@@ -424,6 +425,10 @@ static void skeleton_fill_pix_format(struct skeleton *skel,
 		}
 		pix->colorspace = V4L2_COLORSPACE_REC709;
 	}
+#endif
+	pix->pixelformat = V4L2_PIX_FMT_YUYV;
+	pix->field = V4L2_FIELD_INTERLACED;
+	pix->colorspace = V4L2_COLORSPACE_SMPTE170M;
 
 	/*
 	 * The YUYV format is four bytes for every two pixels, so bytesperline
@@ -457,10 +462,20 @@ static int skeleton_s_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct skeleton *skel = video_drvdata(file);
 	int ret;
+	struct v4l2_subdev_format format = {
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+	};
+	u32 mbus_code = 0;
+	struct v4l2_pix_format *pix_fmt = &f->fmt.pix;
 
+	printk("skeleton_s_fmt_vid_cap height = %d width = %d \n", pix_fmt->height, pix_fmt->width);
 	ret = skeleton_try_fmt_vid_cap(file, priv, f);
 	if (ret)
 		return ret;
+
+	v4l2_fill_mbus_format(&format.format, &f->fmt.pix, mbus_code);
+	ret = v4l2_subdev_call(skel->current_subdev->sd, pad,
+			       set_fmt, NULL, &format);
 
 	/*
 	 * It is not allowed to change the format while buffers for use with
@@ -693,15 +708,8 @@ static int skeleton_enum_input(struct file *file, void *priv,
 		return -EINVAL;
 
 	i->type = V4L2_INPUT_TYPE_CAMERA;
-	if (i->index == 0) {
-		i->std = SKEL_TVNORMS;
-		strlcpy(i->name, "S-Video", sizeof(i->name));
-		i->capabilities = V4L2_IN_CAP_STD;
-	} else {
-		i->std = 0;
-		strlcpy(i->name, "HDMI", sizeof(i->name));
-		i->capabilities = V4L2_IN_CAP_DV_TIMINGS;
-	}
+	i->std = SKEL_TVNORMS;
+	strlcpy(i->name, "camera", sizeof(i->name));
 	return 0;
 }
 
@@ -711,7 +719,7 @@ static int skeleton_s_input(struct file *file, void *priv, unsigned int i)
 
 	if (i > 1)
 		return -EINVAL;
-
+#if 0
 	/*
 	 * Changing the input implies a format change, which is not allowed
 	 * while buffers for use with streaming have already been allocated.
@@ -729,6 +737,7 @@ static int skeleton_s_input(struct file *file, void *priv, unsigned int i)
 
 	/* Update the internal format */
 	skeleton_fill_pix_format(skel, &skel->format);
+#endif
 	return 0;
 }
 
@@ -736,7 +745,7 @@ static int skeleton_g_input(struct file *file, void *priv, unsigned int *i)
 {
 	struct skeleton *skel = video_drvdata(file);
 
-	*i = skel->input;
+	*i = 0; //skel->input;
 	return 0;
 }
 
@@ -789,7 +798,7 @@ static const struct v4l2_ioctl_ops skel_ioctl_ops = {
 	.vidioc_s_fmt_vid_cap = skeleton_s_fmt_vid_cap,
 	.vidioc_g_fmt_vid_cap = skeleton_g_fmt_vid_cap,
 	.vidioc_enum_fmt_vid_cap = skeleton_enum_fmt_vid_cap,
-
+#if 0
 	.vidioc_g_std = skeleton_g_std,
 	.vidioc_s_std = skeleton_s_std,
 	.vidioc_querystd = skeleton_querystd,
@@ -799,11 +808,16 @@ static const struct v4l2_ioctl_ops skel_ioctl_ops = {
 	.vidioc_enum_dv_timings = skeleton_enum_dv_timings,
 	.vidioc_query_dv_timings = skeleton_query_dv_timings,
 	.vidioc_dv_timings_cap = skeleton_dv_timings_cap,
-
+#endif
 	.vidioc_enum_input = skeleton_enum_input,
 	.vidioc_g_input = skeleton_g_input,
 	.vidioc_s_input = skeleton_s_input,
-
+#if 0
+	.vidioc_g_parm = isc_g_parm,
+        .vidioc_s_parm = isc_s_parm,
+        .vidioc_enum_framesizes = isc_enum_framesizes,
+        .vidioc_enum_frameintervals = isc_enum_frameintervals,
+#endif
 	.vidioc_reqbufs = vb2_ioctl_reqbufs,
 	.vidioc_create_bufs = vb2_ioctl_create_bufs,
 	.vidioc_querybuf = vb2_ioctl_querybuf,
